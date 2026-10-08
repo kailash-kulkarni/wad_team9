@@ -240,7 +240,13 @@ const icon = (name) => `<svg aria-hidden="true"><use href="#${name}"/></svg>`,
     hour: "numeric",
     minute: "2-digit"
   });
-const heading = (eyebrow, title, sub, actions = "") => `<div class="heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${sub}</p></div><div class="heading-actions">${actions}</div></div>`,
+const heading = (eyebrow, title, sub, actions = "") => {
+  if (view === "overview") {
+    eyebrow = new Intl.DateTimeFormat("en-GB").format(new Date());
+    title = "Good morning";
+  }
+  return `<div class="heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${sub}</p></div><div class="heading-actions">${actions}</div></div>`
+},
   button = (text, action, primary = false, symbol = "") => `<button class="button${primary?" primary":""}" data-action="${action}">${symbol?icon(symbol):""}${text}</button>`,
   noData = (title, sub) => `<div class="empty-state"><strong>${title}</strong>${sub}</div>`;
 
