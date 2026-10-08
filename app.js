@@ -262,7 +262,7 @@ function overview() {
 }
 
 function facultyTable(people, editable = true) {
-  return `<div class="table-wrap"><table><thead><tr><th>Faculty member</th><th>Department</th><th>Position</th>${editable?"<th>Office</th>":""}<th>Weekly hours</th><th>Status</th>${editable?"<th></th>":""}</tr></thead><tbody>${people.length?people.map(p=>`<tr><td><div class="faculty-cell">${avatar(p)}<div><div class="person-name">${safe(p.name)}</div><div class="person-email">${safe(p.email)}</div></div></div></td><td>${safe(p.department)}</td><td>${safe(p.title)}</td>${editable?`<td>${safe(p.office||"—")}</td>`:""}<td>${fmtHours(hours(p.id))} hrs</td><td><span class="status ${p.status==="On leave"?"leave":""}">${safe(p.status)}</span></td>${editable?`<td><div class="actions"><button class="button icon-only" data-action="edit-faculty" data-id="${p.id}" title="Edit profile" aria-label="Edit ${safe(p.name)}">${icon("edit")}</button><button class="button icon-only" data-action="delete-faculty" data-id="${p.id}" title="Delete profile" aria-label="Delete ${safe(p.name)}">${icon("trash")}</button></div></td>`:""}</tr>`).join(""):`<tr><td colspan="7">${noData("No faculty found","Try another search or add a profile.")}</td></tr>`}</tbody></table></div>`
+  return `<div class="table-wrap"><table><thead><tr><th>Faculty member</th><th>Department</th><th>Position</th>${editable?"<th>Office</th>":""}<th>Weekly hours</th><th>Status</th>${editable?"<th></th>":""}</tr></thead><tbody>${people.length?people.map(p=>`<tr><td><div class="faculty-cell">${avatar(p)}<div><div class="person-name"><button class="faculty-name" type="button" data-action="view-faculty" data-id="${p.id}" aria-label="View profile for ${safe(p.name)}">${safe(p.name)}</button></div><div class="person-email">${safe(p.email)}</div></div></div></td><td>${safe(p.department)}</td><td>${safe(p.title)}</td>${editable?`<td>${safe(p.office||"—")}</td>`:""}<td>${fmtHours(hours(p.id))} hrs</td><td><span class="status ${p.status==="On leave"?"leave":""}">${safe(p.status)}</span></td>${editable?`<td><div class="actions"><button class="button icon-only" data-action="edit-faculty" data-id="${p.id}" title="Edit profile" aria-label="Edit ${safe(p.name)}">${icon("edit")}</button><button class="button icon-only" data-action="delete-faculty" data-id="${p.id}" title="Delete profile" aria-label="Delete ${safe(p.name)}">${icon("trash")}</button></div></td>`:""}</tr>`).join(""):`<tr><td colspan="7">${noData("No faculty found","Try another search or add a profile.")}</td></tr>`}</tbody></table></div>`
 }
 
 function facultyView() {
@@ -368,6 +368,28 @@ function showForm(type, id = null) {
   modal.showModal();
   modal.querySelector("input")?.focus()
 }
+
+function showFacultyDetails(id) {
+  const facultyMember = person(id);
+  if (!facultyMember) return;
+
+  const sessions = sortSchedule().filter(session => session.faculty === id);
+  const assignedSubjects = [...new Set(sessions.map(session => session.subject))]
+    .map(subject)
+    .filter(Boolean);
+
+  const detail = (label, value) => `<div class="profile-detail"><span>${label}</span><strong>${safe(value || "Not provided")}</strong></div>`;
+  const classList = sessions.length
+    ? sessions.map(session => {
+      const course = subject(session.subject);
+      return `<div class="profile-class"><strong>${safe(session.day)} · ${time(session.start)}–${time(session.end)}</strong><span>${safe(course?.code || "Subject")} · ${safe(course?.name || "Unassigned")}</span><span>${safe(session.room || "Room not set")}</span></div>`;
+    }).join("")
+    : `<p class="profile-empty">No classes scheduled.</p>`;
+
+  modal.innerHTML = `<div class="modal-head"><div><h2>${safe(facultyMember.name)}</h2><p>${safe(facultyMember.title)} · ${safe(facultyMember.department)}</p></div><button class="modal-close" type="button" data-action="close" aria-label="Close">${icon("close")}</button></div><div class="profile-body"><div class="profile-grid">${detail("Department", facultyMember.department)}${detail("Academic title", facultyMember.title)}${detail("Email", facultyMember.email)}${detail("Office", facultyMember.office)}${detail("Status", facultyMember.status)}${detail("Weekly teaching hours", `${fmtHours(hours(id))} hours`)}${detail("Assigned subjects", assignedSubjects.map(course => course.code).join(", ") || "None")}</div><h3 class="profile-section-title">Scheduled classes (${sessions.length})</h3><div class="profile-classes">${classList}</div></div>`;
+  modal.showModal();
+}
+
 const csv = (filename, headers, rows) => {
   let text = [headers, ...rows].map(row => row.map(x => `"${String(x??"").replace(/"/g,'""')}"`).join(",")).join("\r\n"),
     a = document.createElement("a");
@@ -395,6 +417,7 @@ document.addEventListener("click", e => {
     id,
     action
   } = b.dataset;
+  if (action === "view-faculty") showFacultyDetails(id);
   if (action === "add-faculty") showForm("faculty");
   if (action === "edit-faculty") showForm("faculty", id);
   if (action === "add-subject") showForm("subjects");
