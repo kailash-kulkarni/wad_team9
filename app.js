@@ -325,6 +325,18 @@ function field(label, name, value = "", type = "text", required = true, options 
   return `<div class="field${full?" full":""}"><label for="f-${name}">${label}${required?" *":""}</label>${options?`<select class="control" id="f-${name}" name="${name}" ${required?"required":""}>${options.map(o=>`<option value="${safe(o.value)}" ${o.value===value?"selected":""}>${safe(o.label)}</option>`).join("")}</select>`:`<input class="control" id="f-${name}" name="${name}" type="${type}" value="${safe(value)}" ${required?"required":""}>`}</div>`
 }
 
+function subjectAllocationField(selectedIds = []) {
+  const checkboxes = data.subjects.map(course => `
+    <label class="subject-option">
+      <input type="checkbox" name="allocatedSubjects" value="${course.id}" ${selectedIds.includes(course.id) ? "checked" : ""}>
+      <span><strong>${safe(course.code)}</strong> · ${safe(course.name)}</span>
+      <small>${safe(course.department)} · ${safe(course.credits)} credits</small>
+    </label>
+  `).join("");
+
+  return `<div class="field full"><span class="field-label">Subjects allocated</span><div class="subject-options">${checkboxes || `<span class="profile-empty">Add subjects in the Subjects section first.</span>`}</div></div>`;
+}
+
 function showForm(type, id = null) {
   let edit = !!id,
     old = edit ? (type === "faculty" ? person(id) : data.subjects.find(s => s.id === id)) : {};
@@ -336,16 +348,22 @@ function showForm(type, id = null) {
     faculty: {
       title: edit ? "Edit faculty profile" : "Add faculty member",
       sub: "Keep faculty contact and department details current.",
-      fields: () => field("Full name", "name", old.name || "") + field("Email address", "email", old.email || "", "email") + field("Department", "department", old.department || depts()[0] || "General", "text", true, (depts().length ? depts() : ["General"]).map(x => ({
-        value: x,
-        label: x
-      }))) + field("Academic title", "title", old.title || "Assistant Professor", "text", true, ["Professor", "Associate Professor", "Assistant Professor", "Lecturer", "Instructor"].map(x => ({
-        value: x,
-        label: x
-      }))) + field("Office location", "office", old.office || "", "text", false) + field("Status", "status", old.status || "Active", "text", true, ["Active", "On leave"].map(x => ({
-        value: x,
-        label: x
-      })))
+      fields: () => field("Full name", "name", old.name || "") +
+        field("Email address", "email", old.email || "", "email") +
+        field("Department", "department", old.department || depts()[0] || "General", "text", true, (depts().length ? depts() : ["General"]).map(x => ({
+          value: x,
+          label: x
+        }))) +
+        field("Academic title", "title", old.title || "Assistant Professor", "text", true, ["Professor", "Associate Professor", "Assistant Professor", "Lecturer", "Instructor"].map(x => ({
+          value: x,
+          label: x
+        }))) +
+        field("Office location", "office", old.office || "", "text", false) +
+        field("Status", "status", old.status || "Active", "text", true, ["Active", "On leave"].map(x => ({
+          value: x,
+          label: x
+        }))) +
+        subjectAllocationField(old.allocatedSubjects || [])
     },
     subjects: {
       title: edit ? "Edit subject" : "Add subject",
@@ -380,7 +398,9 @@ function showFacultyDetails(id) {
   if (!facultyMember) return;
 
   const sessions = sortSchedule().filter(session => session.faculty === id);
-  const assignedSubjects = [...new Set(sessions.map(session => session.subject))]
+  const allocatedIds = facultyMember.allocatedSubjects || [];
+  const selectedSubjectIds = [...new Set([...allocatedIds, ...sessions.map(session => session.subject)])];
+  const assignedSubjects = selectedSubjectIds
     .map(subject)
     .filter(Boolean);
 
@@ -391,8 +411,7 @@ function showFacultyDetails(id) {
       return `<div class="profile-class"><strong>${safe(session.day)} · ${time(session.start)}–${time(session.end)}</strong><span>${safe(course?.code || "Subject")} · ${safe(course?.name || "Unassigned")}</span><span>${safe(session.room || "Room not set")}</span></div>`;
     }).join("")
     : `<p class="profile-empty">No classes scheduled.</p>`;
-
-  modal.innerHTML = `<div class="modal-head"><div><h2>${safe(facultyMember.name)}</h2><p>${safe(facultyMember.title)} · ${safe(facultyMember.department)}</p></div><button class="modal-close" type="button" data-action="close" aria-label="Close">${icon("close")}</button></div><div class="profile-body"><div class="profile-grid">${detail("Department", facultyMember.department)}${detail("Academic title", facultyMember.title)}${detail("Email", facultyMember.email)}${detail("Office", facultyMember.office)}${detail("Status", facultyMember.status)}${detail("Weekly teaching hours", `${fmtHours(hours(id))} hours`)}${detail("Assigned subjects", assignedSubjects.map(course => course.code).join(", ") || "None")}</div><h3 class="profile-section-title">Scheduled classes (${sessions.length})</h3><div class="profile-classes">${classList}</div></div>`;
+  modal.innerHTML = `<div class="modal-head"><div><h2>${safe(facultyMember.name)}</h2><p>${safe(facultyMember.title)} · ${safe(facultyMember.department)}</p></div><button class="modal-close" type="button" data-action="close" aria-label="Close">${icon("close")}</button></div><div class="profile-body"><div class="profile-grid">${detail("Department", facultyMember.department)}${detail("Academic title", facultyMember.title)}${detail("Email", facultyMember.email)}${detail("Office", facultyMember.office)}${detail("Status", facultyMember.status)}${detail("Weekly teaching hours", `${fmtHours(hours(id))} hours`)}</div><button class="button profile-subject-toggle" type="button" data-action="toggle-subjects" aria-expanded="false">Subjects assigned (${assignedSubjects.length})</button><div class="profile-subject-details" hidden>${subjectAllocationField(selectedSubjectIds)}<div class="profile-allocation-actions"><button class="button primary" type="button" data-action="save-subjects" data-id="${id}">Save subjects</button></div></div><h3 class="profile-section-title">Scheduled classes (${sessions.length})</h3><div class="profile-classes">${classList}</div></div>`;
   modal.showModal();
 }
 
@@ -423,6 +442,18 @@ document.addEventListener("click", e => {
     id,
     action
   } = b.dataset;
+  if (action === "save-subjects") {
+    const facultyMember = person(id);
+    facultyMember.allocatedSubjects = [...modal.querySelectorAll("input[name='allocatedSubjects']:checked")].map(input => input.value);
+    save();
+    showFacultyDetails(id);
+    notify("Subject assignments saved.");
+  }
+  if (action === "toggle-subjects") {
+    const subjectDetails = modal.querySelector(".profile-subject-details");
+    subjectDetails.hidden = !subjectDetails.hidden;
+    b.setAttribute("aria-expanded", String(!subjectDetails.hidden));
+  }
   if (action === "view-faculty") showFacultyDetails(id);
   if (action === "add-faculty") showForm("faculty");
   if (action === "edit-faculty") showForm("faculty", id);
@@ -476,7 +507,9 @@ document.addEventListener("submit", e => {
   let form = e.target,
     type = form.dataset.type,
     id = form.dataset.id,
-    values = Object.fromEntries(new FormData(form));
+    formData = new FormData(form),
+    values = Object.fromEntries(formData);
+  if (type === "faculty") values.allocatedSubjects = formData.getAll("allocatedSubjects");
   if (type === "schedule" && values.end <= values.start) {
     notify("End time must be later than start time.");
     return
